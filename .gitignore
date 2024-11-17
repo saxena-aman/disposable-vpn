@@ -1,0 +1,10 @@
+# Ignore .env file (environment variables)
+.env
+# Ignore virtual environment directory
+venv/
+__pycache__/
+
+# Ignore service account JSON file
+disposable-vpn-service-account.json
+
+digital_ocean_ssh_key
