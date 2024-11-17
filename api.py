@@ -62,7 +62,7 @@ def create_vpn():
     # Pass the response to handle the validation and further actions
     return handle_ssh_response(response,droplet_name)
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
 #     # This is needed to run the Flask app when the script is executed directly
-#     app.run(debug=True, host="0.0.0.0", port=8080)
+    app.run(debug=True, host="0.0.0.0", port=8080)
 

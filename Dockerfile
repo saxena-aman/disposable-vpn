@@ -7,15 +7,14 @@ WORKDIR /app
 # Step 3: Copy the requirements.txt into the container
 COPY requirements.txt /app/
 
-# Step 4: Install dependencies, including Gunicorn
+# Step 4: Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Step 5: Copy the application code into the container
 COPY . /app/
 
-# Step 6: Expose the production port (8080)
+# Step 6: Expose the port your Flask app runs on (e.g., 8080)
 EXPOSE 8080
 
-# Step 7: Use Gunicorn to serve the Flask app in production
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "4", "--timeout", "600", "api:app"]
-
+# Step 7: Run the Flask application with Python
+CMD ["python", "api.py"]
