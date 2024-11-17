@@ -44,7 +44,6 @@ def create_vpn():
     
     # Load DigitalOcean VM credentials and paths from environment variables
     username = os.getenv("DIGITALOCEAN_SSH_USERNAME")
-    ssh_key_path = os.getenv("DIGITALOCEAN_SSH_KEY")
     local_script_path = os.getenv("SCRIPT_LOCAL_PATH")
     remote_script_path = os.getenv("SCRIPT_REMOTE_PATH")
     digital_ocean_api_key = os.getenv("DIGITALOCEAN_API_KEY")
@@ -52,12 +51,12 @@ def create_vpn():
     project_id = get_project_id(digital_ocean_api_key, digital_ocean_project)
     ipv4_address = create_droplet(digital_ocean_api_key, project_id, droplet_name=droplet_name, region=region_code)
     
-    time.sleep(45)
+    time.sleep(20)
     # DigitalOcean VM credentials
     host = ipv4_address
 
     # Call the SSH function
-    response, status_code = ssh_execute_script(host, username, ssh_key_path, local_script_path, remote_script_path)
+    response, status_code = ssh_execute_script(host, username, local_script_path, remote_script_path)
         
     # Pass the response to handle the validation and further actions
     return handle_ssh_response(response,droplet_name)
