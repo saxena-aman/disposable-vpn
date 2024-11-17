@@ -29,7 +29,7 @@ def ssh_execute_script(host, username, ssh_key_path, local_script_path, remote_s
         error = stderr.read().decode()
 
         # Log full output for debugging
-        # print("Full Script Output:", output + "\n" + error)
+        print("Full Script Output:", output + "\n" + error)
 
         # Parse the output for expected keys
         result = {}

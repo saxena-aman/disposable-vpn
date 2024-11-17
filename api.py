@@ -52,7 +52,7 @@ def create_vpn():
     project_id = get_project_id(digital_ocean_api_key, digital_ocean_project)
     ipv4_address = create_droplet(digital_ocean_api_key, project_id, droplet_name=droplet_name, region=region_code)
     
-    time.sleep(30)
+    time.sleep(45)
     # DigitalOcean VM credentials
     host = ipv4_address
 
