@@ -62,7 +62,12 @@ def create_vpn():
     if status_code == 200:
     # Pass the response to handle the validation and further actions
         return handle_ssh_response(response,droplet_name)
-
+    else:
+        return jsonify({
+            "status": "error",
+            "message": "Handle SSH Response Function Not Working"
+        }), 400
+        
 if __name__ == '__main__':
 #     # This is needed to run the Flask app when the script is executed directly
     app.run(debug=True, host="0.0.0.0", port=8080)
