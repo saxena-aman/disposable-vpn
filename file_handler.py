@@ -86,16 +86,3 @@ def handle_ssh_response(response,droplet_name):
             "message": "Missing or invalid attributes in response. Ensure CLIENT_PRIVATE_KEY, SERVER_IP, and SERVER_PUBLIC_KEY are provided."
         }), 400
 
-
-
-# Example usage:
-if __name__ == "__main__":
-    client_private_key = "mNZmGfg0WRJaTdFM7OxdszuwxCfpyGVIugeE2ZNPrnY="
-    server_ip = "159.223.231.69"
-    server_public_key = "bhZSoK08C1kD9lmgcCwG2t2Cc/6DvcqVnui1V283bVs="
-    bucket_name = "disposable-vpn"
-    droplet_name = "testing"
-    # Call the function to create and upload the client.conf file
-    public_url = create_and_upload_client_conf(client_private_key, server_ip, server_public_key, bucket_name,droplet_name)
-    
-    print(f"Client configuration uploaded! Public URL: {public_url}")

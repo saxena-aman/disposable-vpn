@@ -1,132 +1,53 @@
 
-from io import StringIO
 import time
 import digitalocean
-import paramiko
 import requests
-import logging
 import os
 from dotenv import load_dotenv
 load_dotenv()
 
-def ssh_execute_script(host, username, local_script_path, remote_script_path):
-    # Set up logging
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
+def ssh_execute_script(host, username, script):
+    # Retrieve the private key from the environment variable
+    private_key = os.getenv("SSH_PRIVATE_KEY")
+    if not private_key:
+        raise EnvironmentError("SSH_PRIVATE_KEY environment variable is not set.")
     
-    ssh = None
+    function_url = os.getenv("CLOUD_FUNCTION_URL")
+    if not function_url:
+        raise EnvironmentError("CLOUD_FUNCTION_URL environment variable is not set.")
+    
+    # Prepare the payload
+    payload = {
+        "host": host,
+        "username": username,
+        "script_content": script,
+        "private_key": private_key  # SSH Private Key from environment or passed in
+    }
+
+    # Define the Cloud Function endpoint
+    api_url = function_url  # Replace with your actual URL
+
     try:
-        # Get private key from environment
-        private_key_string = os.getenv("SSH_PRIVATE_KEY")
-        if not private_key_string:
-            raise ValueError("SSH_PRIVATE_KEY environment variable is not set.")
-
-        # Clean up the private key string
-        private_key_string = private_key_string.strip()
-        if "\\n" in private_key_string:
-            private_key_string = private_key_string.replace("\\n", "\n")
+        # Make a POST request to the Cloud Function
+        response = requests.post(api_url, json=payload)
         
-        # Ensure the key has proper line endings
-        if not private_key_string.endswith('\n'):
-            private_key_string += '\n'
-
-        logger.debug("Private key format check:")
-        # logger.debug(f"Key starts with: {private_key_string[:40]}...")
-        # logger.debug(f"Key ends with: ...{private_key_string[-40:]}")
-
-        # Create a file-like object from the private key string
-        key_stream = StringIO(private_key_string)
-
-        try:
-            # Try ED25519 key first (based on your key format)
-            private_key = paramiko.Ed25519Key.from_private_key(key_stream)
-            logger.info("Successfully loaded ED25519 key")
-        except paramiko.ssh_exception.SSHException:
-            # If ED25519 fails, try RSA
-            key_stream.seek(0)  # Reset stream position
-            try:
-                private_key = paramiko.RSAKey.from_private_key(key_stream)
-                logger.info("Successfully loaded RSA key")
-            except paramiko.ssh_exception.SSHException as e:
-                logger.error(f"Failed to load private key: {str(e)}")
-                raise ValueError(f"Invalid private key format: {str(e)}")
-
-        # Set up SSH connection with more verbose error handling
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
-        logger.info(f"Attempting to connect to {host} with username {username}")
-        try:
-            ssh.connect(
-                hostname=host,
-                username=username,
-                pkey=private_key,
-                timeout=10,
-                allow_agent=False,
-                look_for_keys=False
-            )
-            logger.info("SSH Connection established successfully")
-        except paramiko.AuthenticationException:
-            raise Exception("Authentication failed. Please check your credentials.")
-        except paramiko.SSHException as ssh_exception:
-            raise Exception(f"SSH exception occurred: {str(ssh_exception)}")
-        except Exception as e:
-            raise Exception(f"Connection failed: {str(e)}")
-
-        # Upload and execute script with better error handling
-        try:
-            # Upload script
-            sftp = ssh.open_sftp()
-            logger.info(f"Uploading script from {local_script_path} to {remote_script_path}")
-            sftp.put(local_script_path, remote_script_path)
-            sftp.close()
-
-            # Make script executable
-            logger.info(f"Setting execute permissions on {remote_script_path}")
-            ssh.exec_command(f"chmod +x {remote_script_path}")
-
-            # Execute script
-            logger.info("Executing script")
-            stdin, stdout, stderr = ssh.exec_command(f"sudo bash {remote_script_path}")
-            
-            # Read output with timeout
-            output = stdout.read().decode('utf-8', errors='ignore')
-            error = stderr.read().decode('utf-8', errors='ignore')
-
-            # Log complete output
-            logger.debug(f"Script output: {output}")
-            if error:
-                logger.warning(f"Script stderr: {error}")
-
-            # Parse output
-            result = {}
-            for line in output.splitlines():
-                for key in ['CLIENT_PRIVATE_KEY', 'SERVER_PUBLIC_KEY', 'SERVER_IP']:
-                    if f"{key}=" in line:
-                        result[key] = line.split("=", 1)[1].strip('"\'')
-
-            if result:
-                return {"status": "success", **result}, 200
-            else:
-                return {
-                    "status": "error",
-                    "message": "Script did not produce expected output.",
-                    "output": output,
-                    "error": error
-                }, 500
-
-        except Exception as e:
-            logger.error(f"Error during script execution: {str(e)}")
-            return {"status": "error", "message": str(e)}, 500
-
-    except Exception as e:
-        logger.error(f"Error in ssh_execute_script: {str(e)}")
-        return {"status": "error", "message": str(e)}, 500
-
-    finally:
-        if ssh:
-            ssh.close()
-            logger.info("SSH connection closed")
+        # Handle the response
+        if response.status_code == 200:
+            print("Script executed successfully.")
+            response_data = response.json()  # Assuming the response is in JSON format
+            # Assuming the response contains 'CLIENT_PRIVATE_KEY', 'SERVER_IP', 'SERVER_PUBLIC_KEY', and 'status'
+            return response_data, response.status_code
+        else:
+            print("Error executing script.")
+            print("Status Code:", response.status_code)
+            print("Response:", response.text)
+            return None, response.status_code
+    except requests.exceptions.RequestException as e:
+        print("Failed to make the API call.")
+        print("Error:", str(e))
+        return None, 500  # Return a 500 status code for request exceptions
+    
 
 def move_droplet_to_project(api_token, droplet_id, project_id):
     url = f"https://api.digitalocean.com/v2/projects/{project_id}/resources"
@@ -210,3 +131,13 @@ def create_droplet(api_token, project_id, droplet_name="my-droplet", region="sgp
 
     # Return the IPv4 address of the newly created droplet
     return droplet.ip_address
+
+def read_bash_script(script_path):
+    with open(script_path, 'r') as file:
+        script_content = file.read()
+    return script_content
+
+def escape_script_for_json(script_content):
+    # Escape the script for JSON (handling special characters like newline, quotes, etc.)
+    escaped_script = script_content.replace("\r", "")
+    return escaped_script

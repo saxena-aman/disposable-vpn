@@ -4,7 +4,7 @@ from flask import Flask, jsonify, request
 import time
 import uuid
 from file_handler import handle_ssh_response
-from handlers import create_droplet, get_project_id, ssh_execute_script
+from handlers import create_droplet, escape_script_for_json, get_project_id, read_bash_script, ssh_execute_script
 load_dotenv()
 
 # Mapping of region full names to DigitalOcean region codes
@@ -54,12 +54,14 @@ def create_vpn():
     time.sleep(20)
     # DigitalOcean VM credentials
     host = ipv4_address
-
+    script_content = read_bash_script(local_script_path)
+    escaped_script = escape_script_for_json(script_content)
     # Call the SSH function
-    response, status_code = ssh_execute_script(host, username, local_script_path, remote_script_path)
-        
+    response, status_code = ssh_execute_script(host, username, escaped_script)
+    # Handle the response
+    if status_code == 200:
     # Pass the response to handle the validation and further actions
-    return handle_ssh_response(response,droplet_name)
+        return handle_ssh_response(response,droplet_name)
 
 if __name__ == '__main__':
 #     # This is needed to run the Flask app when the script is executed directly

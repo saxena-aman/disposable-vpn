@@ -8,3 +8,5 @@ __pycache__/
 disposable-vpn-service-account.json
 
 digital_ocean_ssh_key
+
+cloudfunction.txt
