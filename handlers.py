@@ -4,49 +4,63 @@ import digitalocean
 import requests
 import os
 from dotenv import load_dotenv
+from flask import Flask
+import logging
 load_dotenv()
+app = Flask(__name__)
+# Set up logging for Docker visibility
+logging.basicConfig(level=logging.DEBUG)  # Log level set to DEBUG
+logger = logging.getLogger()
+handler = logging.StreamHandler()  # Logs to console (stdout)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+app.logger.handlers = []  # Clear Flask's default handlers
+app.logger.addHandler(handler)
+
+
 
 def ssh_execute_script(host, username, script):
-    # Retrieve the private key from the environment variable
+    """
+    Executes an SSH script by making an API call to a cloud function.
+    """
+    app.logger.debug("Fetching environment variables.")
     private_key = os.getenv("SSH_PRIVATE_KEY")
     if not private_key:
+        app.logger.error("SSH_PRIVATE_KEY environment variable is not set.")
         raise EnvironmentError("SSH_PRIVATE_KEY environment variable is not set.")
     
     function_url = os.getenv("CLOUD_FUNCTION_URL")
     if not function_url:
+        app.logger.error("CLOUD_FUNCTION_URL environment variable is not set.")
         raise EnvironmentError("CLOUD_FUNCTION_URL environment variable is not set.")
     
+    private_key = private_key.replace('\\n', '\n')
+    script = script.replace('\\n', '\n')
     # Prepare the payload
     payload = {
         "host": host,
         "username": username,
         "script_content": script,
-        "private_key": private_key  # SSH Private Key from environment or passed in
+        "private_key": private_key
     }
-
-    # Define the Cloud Function endpoint
-    api_url = function_url  # Replace with your actual URL
-
+    app.logger.debug(f"Prepared payload: {payload}")
+    
+    # Make the API call
     try:
-        # Make a POST request to the Cloud Function
-        response = requests.post(api_url, json=payload)
-        
+        app.logger.info(f"Calling cloud function at {function_url}")
+        response = requests.post(function_url, json=payload)
         
         # Handle the response
         if response.status_code == 200:
-            print("Script executed successfully.")
-            response_data = response.json()  # Assuming the response is in JSON format
-            # Assuming the response contains 'CLIENT_PRIVATE_KEY', 'SERVER_IP', 'SERVER_PUBLIC_KEY', and 'status'
-            return response_data, response.status_code
+            app.logger.info("Script executed successfully via cloud function.")
+            return response.json(), response.status_code
         else:
-            print("Error executing script.")
-            print("Status Code:", response.status_code)
-            print("Response:", response.text)
-            return None, response.status_code
+            app.logger.warning(f"Cloud function returned an error: {response.text}")
+            return {"error": response.text}, response.status_code
     except requests.exceptions.RequestException as e:
-        print("Failed to make the API call.")
-        print("Error:", str(e))
-        return None, 500  # Return a 500 status code for request exceptions
+        app.logger.error(f"Failed to make the API call: {e}")
+        return {"error": str(e)}, 500
     
 
 def move_droplet_to_project(api_token, droplet_id, project_id):
