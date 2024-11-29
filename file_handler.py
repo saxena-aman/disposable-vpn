@@ -1,19 +1,10 @@
 from datetime import timedelta
 import uuid
 from dotenv import load_dotenv
-from flask import jsonify
+from flask import json, jsonify
 from google.cloud import storage
 import os
 load_dotenv()
-# Ensure the environment variable for GCP credentials is set (for local development)
-def setup_gcp_client():
-    # Check if the GOOGLE_APPLICATION_CREDENTIALS environment variable is set
-    if 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ:
-        raise EnvironmentError("GCP credentials not found. Set GOOGLE_APPLICATION_CREDENTIALS environment variable.")
-
-    # Initialize the GCP Storage Client
-    client = storage.Client()
-    return client
 
 # Create the client.conf file content
 def create_client_conf(client_private_key, server_ip, server_public_key):
@@ -36,9 +27,10 @@ def create_and_upload_client_conf(client_private_key, server_ip, server_public_k
     # Step 1: Create the client.conf content
     client_conf_content = create_client_conf(client_private_key, server_ip, server_public_key)
 
-    # Initialize GCP Storage client
-    storage_client = storage.Client()
-
+    service_account_info = os.getenv("SERVICE_ACCOUNT_JSON")
+    service_account_key = json.loads(service_account_info)
+    # # Initialize GCP Storage client
+    storage_client = storage.Client.from_service_account_info(service_account_key)
     # Define folder structure inside GCP bucket
     folder_name = os.getenv("CONFIG_FOLDER")  # You can modify this folder name as needed
     file_name = f"{droplet_name}/client.conf"  # Path within the folder: droplet_name/client.conf
@@ -52,7 +44,7 @@ def create_and_upload_client_conf(client_private_key, server_ip, server_public_k
 
         # Generate a signed URL with the Content-Disposition header to force download
     signed_url = blob.generate_signed_url(
-        version="v2", 
+        version="v4", 
         expiration=timedelta(hours=1),  # Signed URL valid for 1 hour
         method="GET",
         query_parameters={
