@@ -32,12 +32,10 @@ logger.addHandler(handler)
 app.logger.handlers = []  # Clear Flask's default handlers
 app.logger.addHandler(handler)
 
-@app.route('/create_vpn', methods=['POST'])
+@app.route('/create_vpn', methods=['GET'])
 def create_vpn():
     
-    # Parse JSON payload and default to "Singapore" if no region is provided
-    data = request.get_json()
-    region_name = data.get("region", "Singapore").strip()  # Default to "Singapore"
+    region_name = request.args.get("region", "Singapore").strip()  # Default to "Singapore"
     
     # Map the full region name to the corresponding code
     region_code = REGION_MAPPING.get(region_name)
@@ -48,8 +46,8 @@ def create_vpn():
         }), 400
 
     # If 'name' is provided in the body, format it as "droplet-{user-provider-name}",
-    # otherwise, generate a default name with a UUID
-    droplet_name = f"droplet-{data.get('name', uuid.uuid4())}"
+        # Get 'name' from query params, default to a UUID if not provided
+    droplet_name = f"droplet-{request.args.get('name', str(uuid.uuid4()))}"
 
     # Use droplet_name for your droplet creation logic
     print(f"Droplet name: {droplet_name}")
