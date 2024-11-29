@@ -37,7 +37,7 @@ def create_and_upload_client_conf(client_private_key, server_ip, server_public_k
     client_conf_content = create_client_conf(client_private_key, server_ip, server_public_key)
 
     # Initialize GCP Storage client
-    storage_client = storage.Client()
+    storage_client = setup_gcp_client()
 
     # Define folder structure inside GCP bucket
     folder_name = os.getenv("CONFIG_FOLDER")  # You can modify this folder name as needed
