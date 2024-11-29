@@ -52,7 +52,7 @@ def create_and_upload_client_conf(client_private_key, server_ip, server_public_k
 
         # Generate a signed URL with the Content-Disposition header to force download
     signed_url = blob.generate_signed_url(
-        version="v4", 
+        version="v2", 
         expiration=timedelta(hours=1),  # Signed URL valid for 1 hour
         method="GET",
         query_parameters={
