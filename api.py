@@ -4,7 +4,7 @@ from flask import Flask, jsonify, request
 import time
 import uuid
 from file_handler import handle_ssh_response
-from handlers import create_droplet, escape_script_for_json, get_project_id, read_bash_script, ssh_execute_script
+from handlers import create_droplet, delete_droplet, escape_script_for_json, get_project_id, read_bash_script, ssh_execute_script
 load_dotenv()
 import logging
 
@@ -60,7 +60,7 @@ def create_vpn():
     project_id = get_project_id(digital_ocean_api_key, digital_ocean_project)
     ipv4_address = create_droplet(digital_ocean_api_key, project_id, droplet_name=droplet_name, region=region_code)
     
-    time.sleep(20)
+    time.sleep(30)
     # DigitalOcean VM credentials
     host = ipv4_address
     script_content = read_bash_script(local_script_path)
@@ -123,6 +123,29 @@ def execute_script():
         app.logger.exception("An unexpected error occurred during script execution.")
         return jsonify({"error": "An unexpected error occurred", "details": str(e)}), 500
         
+
+@app.route('/delete_vpn', methods=['GET'])
+def delete_vpn():
+    # Get the input parameters from the query string
+    droplet_name = request.args.get('droplet_name')
+    api_token = os.getenv("DIGITALOCEAN_API_KEY")
+    
+    # Check if required parameters are provided
+    if not droplet_name or not api_token:
+        return jsonify({"status": "error", "message": "Missing required parameters: droplet_name or api_token"}), 400
+    
+    # Call the helper function to delete the droplet
+    result = delete_droplet(api_token, droplet_name)
+    
+    # Check the response from the helper function and return appropriate JSON response
+    if result['status'] == 'success':
+        return jsonify({"status": "success", "message": result['message']}), 200
+    else:
+        return jsonify({"status": "error", "message": result['message'], "details": result.get('details', '')}), 500
+    
+
+
+
 if __name__ == '__main__':
 #     # This is needed to run the Flask app when the script is executed directly
     app.run(host='0.0.0.0', port=8080, debug=True)

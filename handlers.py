@@ -4,7 +4,7 @@ import digitalocean
 import requests
 import os
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, json, jsonify
 import logging
 load_dotenv()
 app = Flask(__name__)
@@ -44,7 +44,7 @@ def ssh_execute_script(host, username, script):
         "script_content": script,
         "private_key": private_key
     }
-    app.logger.debug(f"Prepared payload: {payload}")
+    app.logger.debug(f"Prepared payload: {json.dumps(payload)}")
     
     # Make the API call
     try:
@@ -145,6 +145,49 @@ def create_droplet(api_token, project_id, droplet_name="my-droplet", region="sgp
 
     # Return the IPv4 address of the newly created droplet
     return droplet.ip_address
+
+def delete_droplet(api_token, droplet_name="my-droplet"):
+    # Check if required parameters are provided
+    if not droplet_name or not api_token:
+        return jsonify({"status": "error", "message": "Missing required parameters: droplet_name or api_token"}), 400
+    
+    # URL for listing droplets
+    url = 'https://api.digitalocean.com/v2/droplets'
+    
+    # Set up the headers for authentication
+    headers = {
+        'Authorization': f'Bearer {api_token}'
+    }
+    
+    # Make the request to get the list of droplets
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        return jsonify({"status": "error", "message": "Failed to retrieve droplet list", "details": response.json()}), 500
+    
+    droplets = response.json().get('droplets', [])
+    droplet_id = None
+    
+    # Find the droplet ID by name
+    for droplet in droplets:
+        if droplet['name'] == droplet_name:
+            droplet_id = droplet['id']
+            break
+    
+    if not droplet_id:
+        return jsonify({"status": "error", "message": f"Droplet with name '{droplet_name}' not found."}), 404
+    
+    # URL for deleting the droplet
+    delete_url = f'https://api.digitalocean.com/v2/droplets/{droplet_id}'
+    
+    # Make the DELETE request to delete the droplet
+    delete_response = requests.delete(delete_url, headers=headers)
+    
+    if delete_response.status_code == 204:
+        return {"status": "success", "message": f"Droplet '{droplet_name}' (ID: {droplet_id}) deleted successfully"}
+    else:
+        return {"status": "error", "message": f"Failed to delete droplet '{droplet_name}'", "details": delete_response.json()}
+
+
 
 def read_bash_script(script_path):
     with open(script_path, 'r') as file:

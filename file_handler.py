@@ -56,10 +56,13 @@ def create_and_upload_client_conf(client_private_key, server_ip, server_public_k
     return signed_url
 
 def handle_ssh_response(response,droplet_name):
+    # Extract the 'data' field from the response, ensuring it's a dictionary
+    data = response.get("data", {})
+    
     # Extract required fields from the SSH response
-    client_private_key = response.get("CLIENT_PRIVATE_KEY", "").strip()
-    server_ip = response.get("SERVER_IP", "").strip()
-    server_public_key = response.get("SERVER_PUBLIC_KEY", "").strip()
+    client_private_key = data.get("CLIENT_PRIVATE_KEY", "").strip()
+    server_ip = data.get("SERVER_IP", "").strip()
+    server_public_key = data.get("SERVER_PUBLIC_KEY", "").strip()
     
     # Validate that all attributes are present and not empty
     if client_private_key and server_ip and server_public_key:
