@@ -7,6 +7,8 @@ from file_handler import handle_ssh_response
 from handlers import create_droplet, delete_droplet, escape_script_for_json, get_project_id, read_bash_script, ssh_execute_script
 load_dotenv()
 import logging
+import pg8000
+from flask_cors import CORS
 
 # Mapping of region full names to DigitalOcean region codes
 REGION_MAPPING = {
@@ -20,7 +22,7 @@ REGION_MAPPING = {
 
 
 app = Flask(__name__)
-
+CORS(app)
 
 # Set up logging for Docker visibility
 logging.basicConfig(level=logging.DEBUG)  # Log level set to DEBUG
@@ -31,6 +33,47 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 app.logger.handlers = []  # Clear Flask's default handlers
 app.logger.addHandler(handler)
+
+
+def test_db_connection():
+    try:
+        # Replace these with your actual NeonDB credentials
+        conn = pg8000.connect(
+            database="Disposable-VPN",
+            user="Agent",
+            password="G9Hovy6eKVtX",
+            host="ep-rapid-math-a19ydygm.ap-southeast-1.aws.neon.tech",
+            port=5432
+        )
+        
+        # Create a cursor and execute a simple query
+        cur = conn.cursor()
+        cur.execute("SELECT version();")
+        
+        # Fetch and print the result
+        db_version = cur.fetchone()
+        print("Successfully connected to the database!")
+        print(f"PostgreSQL version: {db_version[0]}")
+        
+        # Close cursor and connection
+        cur.close()
+        conn.close()
+        return True
+        
+    except Exception as e:
+        print(f"Unable to connect to the database:")
+        print(f"Error: {e}")
+        return False
+
+@app.route('/')
+def index():
+    if test_db_connection():
+        return jsonify({"message": "Database connection successful!"})
+    else:
+        return jsonify({"message": "Database connection failed!"}), 500
+
+
+
 
 @app.route('/create_vpn', methods=['GET'])
 def create_vpn():
@@ -60,7 +103,7 @@ def create_vpn():
     project_id = get_project_id(digital_ocean_api_key, digital_ocean_project)
     ipv4_address = create_droplet(digital_ocean_api_key, project_id, droplet_name=droplet_name, region=region_code)
     
-    time.sleep(30)
+    time.sleep(25)
     # DigitalOcean VM credentials
     host = ipv4_address
     script_content = read_bash_script(local_script_path)
