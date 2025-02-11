@@ -7,7 +7,7 @@ from file_handler import handle_ssh_response
 from handlers import create_droplet, delete_droplet, escape_script_for_json, get_project_id, read_bash_script, ssh_execute_script
 load_dotenv()
 import logging
-import pg8000
+# import pg8000
 from flask_cors import CORS
 
 # Mapping of region full names to DigitalOcean region codes
@@ -35,42 +35,42 @@ app.logger.handlers = []  # Clear Flask's default handlers
 app.logger.addHandler(handler)
 
 
-def test_db_connection():
-    try:
-        # Replace these with your actual NeonDB credentials
-        conn = pg8000.connect(
-            database="Disposable-VPN",
-            user="Agent",
-            password="G9Hovy6eKVtX",
-            host="ep-rapid-math-a19ydygm.ap-southeast-1.aws.neon.tech",
-            port=5432
-        )
+# def test_db_connection():
+#     try:
+#         # Replace these with your actual NeonDB credentials
+#         conn = pg8000.connect(
+#             database="Disposable-VPN",
+#             user="Agent",
+#             password="G9Hovy6eKVtX",
+#             host="ep-rapid-math-a19ydygm.ap-southeast-1.aws.neon.tech",
+#             port=5432
+#         )
         
-        # Create a cursor and execute a simple query
-        cur = conn.cursor()
-        cur.execute("SELECT version();")
+#         # Create a cursor and execute a simple query
+#         cur = conn.cursor()
+#         cur.execute("SELECT version();")
         
-        # Fetch and print the result
-        db_version = cur.fetchone()
-        print("Successfully connected to the database!")
-        print(f"PostgreSQL version: {db_version[0]}")
+#         # Fetch and print the result
+#         db_version = cur.fetchone()
+#         print("Successfully connected to the database!")
+#         print(f"PostgreSQL version: {db_version[0]}")
         
-        # Close cursor and connection
-        cur.close()
-        conn.close()
-        return True
+#         # Close cursor and connection
+#         cur.close()
+#         conn.close()
+#         return True
         
-    except Exception as e:
-        print(f"Unable to connect to the database:")
-        print(f"Error: {e}")
-        return False
+#     except Exception as e:
+#         print(f"Unable to connect to the database:")
+#         print(f"Error: {e}")
+#         return False
 
-@app.route('/')
-def index():
-    if test_db_connection():
-        return jsonify({"message": "Database connection successful!"})
-    else:
-        return jsonify({"message": "Database connection failed!"}), 500
+# @app.route('/')
+# def index():
+#     if test_db_connection():
+#         return jsonify({"message": "Database connection successful!"})
+#     else:
+#         return jsonify({"message": "Database connection failed!"}), 500
 
 
 
