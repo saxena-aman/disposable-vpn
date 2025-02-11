@@ -191,5 +191,6 @@ def delete_vpn():
 
 if __name__ == '__main__':
 #     # This is needed to run the Flask app when the script is executed directly
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, debug=True)
 
