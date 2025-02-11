@@ -73,7 +73,9 @@ app.logger.addHandler(handler)
 #         return jsonify({"message": "Database connection failed!"}), 500
 
 
-
+@app.route("/")
+def home():
+    return "Hello from Cloud Run!"
 
 @app.route('/create_vpn', methods=['GET'])
 def create_vpn():
