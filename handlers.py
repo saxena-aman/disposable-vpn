@@ -114,7 +114,7 @@ def get_ssh_key_id(api_token):
             return key.id
     raise ValueError(f"SSH key '{ssh_key_name}' not found.")
 
-def create_droplet(api_token, project_id, droplet_name="my-droplet", region="sgp1", size="s-1vcpu-512mb-10gb", image="ubuntu-20-04-x64"):
+def create_droplet(api_token, project_id, droplet_name="my-droplet", region="sgp1", size="s-1vcpu-512mb-10gb", image="ubuntu-24-04-x64"):
     # Get SSH key ID by name
     ssh_key_id = get_ssh_key_id(api_token)
 
