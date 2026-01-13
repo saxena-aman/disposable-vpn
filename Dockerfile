@@ -1,21 +1,28 @@
-# Step 1: Use an official Python image as a base image
-FROM python:3.9-slim
+# Use the slim variant of the official Python image
+FROM python:3.11-slim
 
-# Step 2: Set the working directory inside the container
+# Set the working directory in the container
 WORKDIR /app
 
-# Step 3: Copy the requirements.txt into the container
-COPY requirements.txt /app/
+# Install system dependencies for Python and Flask
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    python3-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Step 4: Install dependencies, including Gunicorn
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy the requirements.txt file to the working directory
+COPY requirements.txt .
 
-# Step 5: Copy the application code into the container
-COPY . /app/
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Step 6: Expose the production port (8080)
+# Copy the rest of your Flask app code into the container
+COPY . .
+
+# Expose the port your app will run on
 EXPOSE 8080
 
-# Step 7: Use Gunicorn to serve the Flask app in production
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "4", "--timeout", "600", "api:app"]
-
+# Command to run the Flask app
+CMD ["python", "api.py"]

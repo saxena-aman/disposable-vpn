@@ -1,19 +1,10 @@
 from datetime import timedelta
 import uuid
 from dotenv import load_dotenv
-from flask import jsonify
+from flask import json, jsonify
 from google.cloud import storage
 import os
 load_dotenv()
-# Ensure the environment variable for GCP credentials is set (for local development)
-def setup_gcp_client():
-    # Check if the GOOGLE_APPLICATION_CREDENTIALS environment variable is set
-    if 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ:
-        raise EnvironmentError("GCP credentials not found. Set GOOGLE_APPLICATION_CREDENTIALS environment variable.")
-
-    # Initialize the GCP Storage Client
-    client = storage.Client()
-    return client
 
 # Create the client.conf file content
 def create_client_conf(client_private_key, server_ip, server_public_key):
@@ -36,9 +27,10 @@ def create_and_upload_client_conf(client_private_key, server_ip, server_public_k
     # Step 1: Create the client.conf content
     client_conf_content = create_client_conf(client_private_key, server_ip, server_public_key)
 
-    # Initialize GCP Storage client
-    storage_client = storage.Client()
-
+    service_account_info = os.getenv("SERVICE_ACCOUNT_JSON")
+    service_account_key = json.loads(service_account_info)
+    # # Initialize GCP Storage client
+    storage_client = storage.Client.from_service_account_info(service_account_key)
     # Define folder structure inside GCP bucket
     folder_name = os.getenv("CONFIG_FOLDER")  # You can modify this folder name as needed
     file_name = f"{droplet_name}/client.conf"  # Path within the folder: droplet_name/client.conf
@@ -64,10 +56,13 @@ def create_and_upload_client_conf(client_private_key, server_ip, server_public_k
     return signed_url
 
 def handle_ssh_response(response,droplet_name):
+    # Extract the 'data' field from the response, ensuring it's a dictionary
+    data = response.get("data", {})
+    
     # Extract required fields from the SSH response
-    client_private_key = response.get("CLIENT_PRIVATE_KEY", "").strip()
-    server_ip = response.get("SERVER_IP", "").strip()
-    server_public_key = response.get("SERVER_PUBLIC_KEY", "").strip()
+    client_private_key = data.get("CLIENT_PRIVATE_KEY", "").strip()
+    server_ip = data.get("SERVER_IP", "").strip()
+    server_public_key = data.get("SERVER_PUBLIC_KEY", "").strip()
     
     # Validate that all attributes are present and not empty
     if client_private_key and server_ip and server_public_key:
@@ -86,16 +81,3 @@ def handle_ssh_response(response,droplet_name):
             "message": "Missing or invalid attributes in response. Ensure CLIENT_PRIVATE_KEY, SERVER_IP, and SERVER_PUBLIC_KEY are provided."
         }), 400
 
-
-
-# Example usage:
-if __name__ == "__main__":
-    client_private_key = "mNZmGfg0WRJaTdFM7OxdszuwxCfpyGVIugeE2ZNPrnY="
-    server_ip = "159.223.231.69"
-    server_public_key = "bhZSoK08C1kD9lmgcCwG2t2Cc/6DvcqVnui1V283bVs="
-    bucket_name = "disposable-vpn"
-    droplet_name = "testing"
-    # Call the function to create and upload the client.conf file
-    public_url = create_and_upload_client_conf(client_private_key, server_ip, server_public_key, bucket_name,droplet_name)
-    
-    print(f"Client configuration uploaded! Public URL: {public_url}")

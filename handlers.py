@@ -1,59 +1,67 @@
 
 import time
 import digitalocean
-import paramiko
 import requests
 import os
 from dotenv import load_dotenv
+from flask import Flask, json, jsonify
+import logging
 load_dotenv()
+app = Flask(__name__)
+# Set up logging for Docker visibility
+logging.basicConfig(level=logging.DEBUG)  # Log level set to DEBUG
+logger = logging.getLogger()
+handler = logging.StreamHandler()  # Logs to console (stdout)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+app.logger.handlers = []  # Clear Flask's default handlers
+app.logger.addHandler(handler)
 
-def ssh_execute_script(host, username, ssh_key_path, local_script_path, remote_script_path):
-    import paramiko
+
+
+def ssh_execute_script(host, username, script):
+    """
+    Executes an SSH script by making an API call to a cloud function.
+    """
+    app.logger.debug("Fetching environment variables.")
+    private_key = os.getenv("SSH_PRIVATE_KEY")
+    if not private_key:
+        app.logger.error("SSH_PRIVATE_KEY environment variable is not set.")
+        raise EnvironmentError("SSH_PRIVATE_KEY environment variable is not set.")
+    
+    function_url = os.getenv("CLOUD_FUNCTION_URL")
+    if not function_url:
+        app.logger.error("CLOUD_FUNCTION_URL environment variable is not set.")
+        raise EnvironmentError("CLOUD_FUNCTION_URL environment variable is not set.")
+    
+    private_key = private_key.replace('\\n', '\n')
+    script = script.replace('\\n', '\n')
+    # Prepare the payload
+    payload = {
+        "host": host,
+        "username": username,
+        "script_content": script,
+        "private_key": private_key
+    }
+    app.logger.debug(f"Prepared payload: {json.dumps(payload)}")
+    
+    # Make the API call
     try:
-        # Set up SSH connection
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(hostname=host, username=username, key_filename=ssh_key_path)
-
-        # Upload the script to the remote server
-        sftp = ssh.open_sftp()
-        sftp.put(local_script_path, remote_script_path)
-        sftp.close()
-
-        # Ensure the script is executable
-        ssh.exec_command(f"chmod +x {remote_script_path}")
-
-        # Run the bash script with the proper environment
-        stdin, stdout, stderr = ssh.exec_command(f"sudo bash {remote_script_path}")
-        output = stdout.read().decode()
-        error = stderr.read().decode()
-
-        # Log full output for debugging
-        # print("Full Script Output:", output + "\n" + error)
-
-        # Parse the output for expected keys
-        result = {}
-        for line in output.splitlines():
-            if "CLIENT_PRIVATE_KEY=" in line:
-                result["CLIENT_PRIVATE_KEY"] = line.split("=", 1)[1].strip('"\'')
-            elif "SERVER_PUBLIC_KEY=" in line:
-                result["SERVER_PUBLIC_KEY"] = line.split("=", 1)[1].strip('"\'')
-            elif "SERVER_IP=" in line:
-                result["SERVER_IP"] = line.split("=", 1)[1].strip('"\'')
+        app.logger.info(f"Calling cloud function at {function_url}")
+        response = requests.post(function_url, json=payload)
         
-        ssh.close()
-
-        if result:
-            return {"status": "success", **result}, 200
+        # Handle the response
+        if response.status_code == 200:
+            app.logger.info("Script executed successfully via cloud function.")
+            return response.json(), response.status_code
         else:
-            return {"status": "error", "message": "Script did not produce expected output."}, 500
-
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
-
-    finally:
-        ssh.close()
-
+            app.logger.warning(f"Cloud function returned an error: {response.text}")
+            return {"error": response.text}, response.status_code
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Failed to make the API call: {e}")
+        return {"error": str(e)}, 500
+    
 
 def move_droplet_to_project(api_token, droplet_id, project_id):
     url = f"https://api.digitalocean.com/v2/projects/{project_id}/resources"
@@ -106,7 +114,7 @@ def get_ssh_key_id(api_token):
             return key.id
     raise ValueError(f"SSH key '{ssh_key_name}' not found.")
 
-def create_droplet(api_token, project_id, droplet_name="my-droplet", region="sgp1", size="s-1vcpu-512mb-10gb", image="ubuntu-20-04-x64"):
+def create_droplet(api_token, project_id, droplet_name="my-droplet", region="sgp1", size="s-1vcpu-512mb-10gb", image="ubuntu-24-04-x64"):
     # Get SSH key ID by name
     ssh_key_id = get_ssh_key_id(api_token)
 
@@ -137,3 +145,56 @@ def create_droplet(api_token, project_id, droplet_name="my-droplet", region="sgp
 
     # Return the IPv4 address of the newly created droplet
     return droplet.ip_address
+
+def delete_droplet(api_token, droplet_name="my-droplet"):
+    # Check if required parameters are provided
+    if not droplet_name or not api_token:
+        return jsonify({"status": "error", "message": "Missing required parameters: droplet_name or api_token"}), 400
+    
+    # URL for listing droplets
+    url = 'https://api.digitalocean.com/v2/droplets'
+    
+    # Set up the headers for authentication
+    headers = {
+        'Authorization': f'Bearer {api_token}'
+    }
+    
+    # Make the request to get the list of droplets
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        return jsonify({"status": "error", "message": "Failed to retrieve droplet list", "details": response.json()}), 500
+    
+    droplets = response.json().get('droplets', [])
+    droplet_id = None
+    
+    # Find the droplet ID by name
+    for droplet in droplets:
+        if droplet['name'] == droplet_name:
+            droplet_id = droplet['id']
+            break
+    
+    if not droplet_id:
+        return jsonify({"status": "error", "message": f"Droplet with name '{droplet_name}' not found."}), 404
+    
+    # URL for deleting the droplet
+    delete_url = f'https://api.digitalocean.com/v2/droplets/{droplet_id}'
+    
+    # Make the DELETE request to delete the droplet
+    delete_response = requests.delete(delete_url, headers=headers)
+    
+    if delete_response.status_code == 204:
+        return {"status": "success", "message": f"Droplet '{droplet_name}' (ID: {droplet_id}) deleted successfully"}
+    else:
+        return {"status": "error", "message": f"Failed to delete droplet '{droplet_name}'", "details": delete_response.json()}
+
+
+
+def read_bash_script(script_path):
+    with open(script_path, 'r') as file:
+        script_content = file.read()
+    return script_content
+
+def escape_script_for_json(script_content):
+    # Escape the script for JSON (handling special characters like newline, quotes, etc.)
+    escaped_script = script_content.replace("\r", "")
+    return escaped_script

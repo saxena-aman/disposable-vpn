@@ -4,8 +4,11 @@ from flask import Flask, jsonify, request
 import time
 import uuid
 from file_handler import handle_ssh_response
-from handlers import create_droplet, get_project_id, ssh_execute_script
+from handlers import create_droplet, delete_droplet, escape_script_for_json, get_project_id, read_bash_script, ssh_execute_script
 load_dotenv()
+import logging
+# import pg8000
+from flask_cors import CORS
 
 # Mapping of region full names to DigitalOcean region codes
 REGION_MAPPING = {
@@ -19,13 +22,65 @@ REGION_MAPPING = {
 
 
 app = Flask(__name__)
+CORS(app)
 
-@app.route('/create_vpn', methods=['POST'])
+# Set up logging for Docker visibility
+logging.basicConfig(level=logging.DEBUG)  # Log level set to DEBUG
+logger = logging.getLogger()
+handler = logging.StreamHandler()  # Logs to console (stdout)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+app.logger.handlers = []  # Clear Flask's default handlers
+app.logger.addHandler(handler)
+
+
+# def test_db_connection():
+#     try:
+#         # Replace these with your actual NeonDB credentials
+#         conn = pg8000.connect(
+#             database="Disposable-VPN",
+#             user="Agent",
+#             password="G9Hovy6eKVtX",
+#             host="ep-rapid-math-a19ydygm.ap-southeast-1.aws.neon.tech",
+#             port=5432
+#         )
+        
+#         # Create a cursor and execute a simple query
+#         cur = conn.cursor()
+#         cur.execute("SELECT version();")
+        
+#         # Fetch and print the result
+#         db_version = cur.fetchone()
+#         print("Successfully connected to the database!")
+#         print(f"PostgreSQL version: {db_version[0]}")
+        
+#         # Close cursor and connection
+#         cur.close()
+#         conn.close()
+#         return True
+        
+#     except Exception as e:
+#         print(f"Unable to connect to the database:")
+#         print(f"Error: {e}")
+#         return False
+
+# @app.route('/')
+# def index():
+#     if test_db_connection():
+#         return jsonify({"message": "Database connection successful!"})
+#     else:
+#         return jsonify({"message": "Database connection failed!"}), 500
+
+
+@app.route("/")
+def home():
+    return "Hello from Cloud Run!"
+
+@app.route('/create_vpn', methods=['GET'])
 def create_vpn():
     
-    # Parse JSON payload and default to "Singapore" if no region is provided
-    data = request.get_json()
-    region_name = data.get("region", "Singapore").strip()  # Default to "Singapore"
+    region_name = request.args.get("region", "Singapore").strip()  # Default to "Singapore"
     
     # Map the full region name to the corresponding code
     region_code = REGION_MAPPING.get(region_name)
@@ -36,33 +91,108 @@ def create_vpn():
         }), 400
 
     # If 'name' is provided in the body, format it as "droplet-{user-provider-name}",
-    # otherwise, generate a default name with a UUID
-    droplet_name = f"droplet-{data.get('name', uuid.uuid4())}"
+        # Get 'name' from query params, default to a UUID if not provided
+    droplet_name = f"droplet-{request.args.get('name', str(uuid.uuid4()))}"
 
     # Use droplet_name for your droplet creation logic
     print(f"Droplet name: {droplet_name}")
     
     # Load DigitalOcean VM credentials and paths from environment variables
     username = os.getenv("DIGITALOCEAN_SSH_USERNAME")
-    ssh_key_path = os.getenv("DIGITALOCEAN_SSH_KEY")
     local_script_path = os.getenv("SCRIPT_LOCAL_PATH")
-    remote_script_path = os.getenv("SCRIPT_REMOTE_PATH")
     digital_ocean_api_key = os.getenv("DIGITALOCEAN_API_KEY")
     digital_ocean_project = os.getenv("DIGITAL_OCEAN_PROJECT")
     project_id = get_project_id(digital_ocean_api_key, digital_ocean_project)
     ipv4_address = create_droplet(digital_ocean_api_key, project_id, droplet_name=droplet_name, region=region_code)
     
-    time.sleep(30)
+    time.sleep(25)
     # DigitalOcean VM credentials
     host = ipv4_address
-
+    script_content = read_bash_script(local_script_path)
+    escaped_script = escape_script_for_json(script_content)
     # Call the SSH function
-    response, status_code = ssh_execute_script(host, username, ssh_key_path, local_script_path, remote_script_path)
-        
-    # Pass the response to handle the validation and further actions
-    return handle_ssh_response(response,droplet_name)
+    response, status_code = ssh_execute_script(host, username, escaped_script)
 
-# if __name__ == '__main__':
+    app.logger.debug(f"Response from ssh_execute_script_function: {response}")
+    # Handle the response
+    if status_code == 200:
+    # Pass the response to handle the validation and further actions
+        return handle_ssh_response(response,droplet_name)
+    else:
+        return jsonify({
+            "status": "error",
+            "message": "Handle SSH Response Function Not Working"
+        }), 400
+        
+@app.route('/execute_script', methods=['POST'])
+def execute_script():
+    """
+    Flask endpoint to execute a script on a remote host.
+
+    Expects a JSON payload with:
+    - host: The target host
+    - username: The SSH username
+    - script: The script content to execute
+    """
+    try:
+        app.logger.info("Received a request to execute a script.")
+
+        # Parse request data
+        data = request.get_json()
+        if not data:
+            app.logger.error("Invalid or missing JSON payload.")
+            return jsonify({"error": "Invalid or missing JSON payload"}), 400
+        
+        host = data.get("host")
+        username = data.get("username")
+        script = data.get("script")
+        
+        if not all([host, username, script]):
+            app.logger.error("Missing required fields: host, username, or script.")
+            return jsonify({"error": "Missing required fields: host, username, or script"}), 400
+        
+        # app.logger.debug(f"Host: {host}, Username: {username}, Script: {script}")
+        
+        # Use the ssh_execute_script function
+        app.logger.info("Calling ssh_execute_script function.")
+        response_data, status_code = ssh_execute_script(host, username, script)
+        
+        # Log the response
+        app.logger.debug(f"Response from ssh_execute_script: {response_data}")
+        return jsonify(response_data), status_code
+    
+    except EnvironmentError as e:
+        app.logger.error(f"Environment configuration error: {e}")
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        app.logger.exception("An unexpected error occurred during script execution.")
+        return jsonify({"error": "An unexpected error occurred", "details": str(e)}), 500
+        
+
+@app.route('/delete_vpn', methods=['GET'])
+def delete_vpn():
+    # Get the input parameters from the query string
+    droplet_name = request.args.get('droplet_name')
+    api_token = os.getenv("DIGITALOCEAN_API_KEY")
+    
+    # Check if required parameters are provided
+    if not droplet_name or not api_token:
+        return jsonify({"status": "error", "message": "Missing required parameters: droplet_name or api_token"}), 400
+    
+    # Call the helper function to delete the droplet
+    result = delete_droplet(api_token, droplet_name)
+    
+    # Check the response from the helper function and return appropriate JSON response
+    if result['status'] == 'success':
+        return jsonify({"status": "success", "message": result['message']}), 200
+    else:
+        return jsonify({"status": "error", "message": result['message'], "details": result.get('details', '')}), 500
+    
+
+
+
+if __name__ == '__main__':
 #     # This is needed to run the Flask app when the script is executed directly
-#     app.run(debug=True, host="0.0.0.0", port=8080)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, debug=True)
 
